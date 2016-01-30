@@ -6,17 +6,30 @@
   #include <avr/power.h>
 #endif
 
+// LED
+#define PIN 5
+#define PARTS 5
+
+// Position matrixes
+byte right_bottom_arm [][3] = {{0,  1,  2}, {3,  4,  5}, {6, 7, 8}, {9, 10, 11}};
+byte right_upper_arm [][3] = {{12,  13,  14}, {15,  16,  17}, {18, 18, 19}};
+byte chest [][6] = {{20,  21,  22,  23,  24,  25},{26,  27,  28,  29,  30, 31},{32, 33, 34, 35, 36, 37},{38, 39, 40, 41, 42, 43},{44, 45, 46, 47, 48, 49}, {50, 51, 52, 52, 53, 54}};
+byte left_upper_arm [][55] = {{56,  57,  58}, {59,  60, 61}, {62, 62, 63}};
+byte left_bottom_arm [][3] = {{64,  65, 66}, {67,  68,  69}, {70, 71, 72}, {73, 74, 75}};
+
+// LedStrip Object
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(12, PIN, NEO_GRB + NEO_KHZ800);
+
 //WIFI Connect
 int status = WL_IDLE_STATUS;
-char ssid[] = "Innovation Dock WiFi";  //  your network SSID (name)
-char pass[] = "RDMCampus123";       // your network password
+char ssid[] = "";  //  your network SSID (name)
+char pass[] = "";       // your network password
 int keyIndex = 0;            // your network key Index number (needed only for WEP)
 
 //WebServer
 const char* host = "172.31.81.194";
-IPAddress webServer(172,31,81,194);
 
-//WIFI Webserver
+//WIFI Webserver 
 WiFiServer server(80);
 
 //NTP
@@ -24,6 +37,7 @@ unsigned int localPort = 2390;
 IPAddress timeServer(95, 46, 198, 21);
 const int NTP_PACKET_SIZE = 48;
 byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
+unsigned long secsSince1900 = 0;
 
 // A UDP instance to let us send and receive packets over UDP
 WiFiUDP Udp;
@@ -119,6 +133,7 @@ void runWebServer()
   client.print(s);
 }
 
+// Store NTP-Server seconds from 1900
 void setTime(){
   int packetSize = Udp.parsePacket();
   if (packetSize) {
@@ -133,38 +148,8 @@ void setTime(){
     unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
     // combine the four bytes (two words) into a long integer
     // this is NTP time (seconds since Jan 1 1900):
-    unsigned long secsSince1900 = highWord << 16 | lowWord;
-    Serial.print("Seconds since Jan 1 1900 = ");
-    Serial.println(secsSince1900);
-
-    // now convert NTP time into everyday time:
-    Serial.print("Unix time = ");
-    // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
-    const unsigned long seventyYears = 2208988800UL;
-    // subtract seventy years:
-    unsigned long epoch = secsSince1900 - seventyYears;
-    // print Unix time:
-    Serial.println(epoch);
-
-
-    // print the hour, minute and second:
-    Serial.print("The UTC time is ");       // UTC is the time at Greenwich Meridian (GMT)
-    Serial.print((epoch  % 86400L) / 3600); // print the hour (86400 equals secs per day)
-    Serial.print(':');
-    if (((epoch % 3600) / 60) < 10) {
-      // In the first 10 minutes of each hour, we'll want a leading '0'
-      Serial.print('0');
-    }
-    Serial.print((epoch  % 3600) / 60); // print the minute (3600 equals secs per minute)
-    Serial.print(':');
-    if ((epoch % 60) < 10) {
-      // In the first 10 seconds of each minute, we'll want a leading '0'
-      Serial.print('0');
-    }
-    Serial.println(epoch % 60); // print the second
+    secsSince1900 = highWord << 16 | lowWord;
   }
-  // wait ten seconds before asking for the time again
-  delay(10000);
 }
 
 // send an NTP request to the time server at the given address
@@ -239,18 +224,87 @@ void getStatus(){
 
 void hexToRGB(String hexstring, byte *buff){
   long number = (long) strtol( &hexstring[1], NULL, 16);
-  byte color[3];
   buff[0]= number >> 16;
   buff[1] = number >> 8 & 0xFF;
   buff[2] = number & 0xFF;
 }
 
+void setAllColor(int id, uint32_t color){
+  size_t y = 0;
+  size_t x = 0;
+ 
+  if (id == 1){
+    y = sizeof (right_bottom_arm);
+    x = sizeof (right_bottom_arm[0]);
+
+    for (int i = 0; i < x; i++){
+      for (int ii = 0; ii < y; ii++){
+        strip.setPixelColor(right_bottom_arm[ii][i], color);
+      }
+    }
+  }
+  else if (id == 2){
+    y = sizeof (right_upper_arm);
+    x = sizeof (right_upper_arm[0]);
+
+    for (int i = 0; i < x; i++){
+      for (int ii = 0; ii < y; ii++){
+        strip.setPixelColor(right_upper_arm[ii][i], color);
+      }
+    }
+  }
+  else if (id == 3){
+    y = sizeof (chest);
+    x = sizeof (chest[0]);
+
+    for (int i = 0; i < x; i++){
+      for (int ii = 0; ii < y; ii++){
+        strip.setPixelColor(chest[ii][i], color);
+      }
+    }
+  }
+  else if (id == 4){
+    y = sizeof (left_upper_arm);
+    x = sizeof (left_upper_arm[0]);
+
+    for (int i = 0; i < x; i++){
+      for (int ii = 0; ii < y; ii++){
+        strip.setPixelColor(left_upper_arm[ii][i], color);
+      }
+    }
+  }
+  else if (id == 5){
+     y = sizeof (left_bottom_arm);
+    x = sizeof (left_bottom_arm[0]);
+
+    for (int i = 0; i < x; i++){
+      for (int ii = 0; ii < y; ii++){
+        strip.setPixelColor(left_bottom_arm[ii][i], color);
+      }
+    }
+  }
+}
+
+// Parse json from webserver to 2d byte array
+void parseScenario(){
+//  char json[] = "{\"p\":\"gps\",\"time\":1351824120,\"data\":[48.756080,2.302038]}";
+//
+//  StaticJsonBuffer<200> jsonBuffer;
+//  
+//  JsonObject& root = jsonBuffer.parseObject(json);
+//  
+//  const char* sensor = root["parts"];
+//  long time          = root["time"];
+//  double latitude    = root["data"][0];
+//  double longitude   = root["data"][1];
+}
 void setup() {
+  setAllColor(0, strip.Color(255,0,0));
   // put your setup code here, to run once:
-  Serial.begin(9600);
-  setupAccessPoint();
-//  connectWiFi();
-//  getStatus();
+  //  Serial.begin(9600);
+  //  setupAccessPoint();
+  //  connectWiFi();
+  //  getStatus();
 }
 
 void loop() {
