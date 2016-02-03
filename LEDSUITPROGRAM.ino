@@ -9,19 +9,42 @@
 // LED
 #define PIN 5
 #define PARTS 5
+#define EVENTS 5
+
+
+// SUIT Constants
+#define NONE 0
+#define LOAD_SCENARIO 1
+#define START_SCENARIO 2
+#define RUNNING 3
+
+byte ledStatus = NONE;
 
 // Position matrixes
 byte right_bottom_arm [][3] = {{0,  1,  2}, {3,  4,  5}, {6, 7, 8}, {9, 10, 11}};
 byte right_upper_arm [][3] = {{12,  13,  14}, {15,  16,  17}, {18, 18, 19}};
 byte chest [][6] = {{20,  21,  22,  23,  24,  25},{26,  27,  28,  29,  30, 31},{32, 33, 34, 35, 36, 37},{38, 39, 40, 41, 42, 43},{44, 45, 46, 47, 48, 49}, {50, 51, 52, 52, 53, 54}};
-byte left_upper_arm [][55] = {{56,  57,  58}, {59,  60, 61}, {62, 62, 63}};
+byte left_upper_arm [][3] = {{56,  57,  58}, {59,  60, 61}, {62, 62, 63}};
 byte left_bottom_arm [][3] = {{64,  65, 66}, {67,  68,  69}, {70, 71, 72}, {73, 74, 75}};
+
+byte timings[PARTS] = {0,0,0,0,0};
+byte positions[PARTS] = {0,0,0,0,0};
+byte delays[PARTS] = {0,0,0,0,0};
+
+//[PARTS][EVENTS][part_id,mode,r,g,b,delay]
+byte example_response_matrix [PARTS][EVENTS][6] = {
+  {{1,1,255,255,255,50},{1,1,255,0,255,50},{1,1,0,255,0,50},{1,1,0,0,255,50}},
+  {{2,1,255,255,255,50},{2,1,0,255,255,50},{2,1,255,255,255,50}},
+  {{3,1,255,255,255,50},{3,1,255,0,255,50},{3,1,0,255,0,50},{3,1,0,255,0,50}},
+  {{4,1,255,255,255,50},{4,1,0,255,255,50},{4,1,0,255,255,50},{4,1,255,0,255,50},{4,1,0,255,0,50}},
+  {{5,1,255,255,255,50},{5,1,0,255,255,50},{5,1,0,255,255,50},{5,1,255,0,255,50},{5,1,0,255,0,50}}};
+  
 
 // LedStrip Object
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(12, PIN, NEO_GRB + NEO_KHZ800);
 
 //WIFI Connect
-int status = WL_IDLE_STATUS;
+byte WifiStatus = WL_IDLE_STATUS;
 char ssid[] = "";  //  your network SSID (name)
 char pass[] = "";       // your network password
 int keyIndex = 0;            // your network key Index number (needed only for WEP)
@@ -149,6 +172,7 @@ void setTime(){
     // combine the four bytes (two words) into a long integer
     // this is NTP time (seconds since Jan 1 1900):
     secsSince1900 = highWord << 16 | lowWord;
+// TODO!! Store NTP time and current millis in two global variables
   }
 }
 
@@ -179,18 +203,21 @@ unsigned long sendNTPpacket(IPAddress& address) {
   //Serial.println("6");
 }
 
+// Connect to WiFi based on SSID and PASS
 void connectWiFi(){
   WiFi.mode(WIFI_STA);
   // attempt to connect to Wifi network:
-  while (status != WL_CONNECTED) {
+  while (WifiStatus != WL_CONNECTED) {
     Serial.println("Attempting to connect to SSID: ");
    //connect to Wifi network
-    status = WiFi.begin(ssid, pass);
+    WifiStatus = WiFi.begin(ssid, pass);
   }
-  if (status) {
+  if (WifiStatus) {
     Serial.println("Connected to the WIFI");
   }
 }
+
+// HTTP /GET request to webserver to receive its status
 void getStatus(){
   Serial.print("connecting to: ");
   Serial.println(host);
@@ -222,6 +249,7 @@ void getStatus(){
   Serial.println("closing connection");
 }
 
+// calculate hex to rgb, store in byte array buff
 void hexToRGB(String hexstring, byte *buff){
   long number = (long) strtol( &hexstring[1], NULL, 16);
   buff[0]= number >> 16;
@@ -229,6 +257,7 @@ void hexToRGB(String hexstring, byte *buff){
   buff[2] = number & 0xFF;
 }
 
+// Set color of leds in part
 void setAllColor(int id, uint32_t color){
   size_t y = 0;
   size_t x = 0;
@@ -287,29 +316,46 @@ void setAllColor(int id, uint32_t color){
 
 // Parse json from webserver to 2d byte array
 void parseScenario(){
-//  char json[] = "{\"p\":\"gps\",\"time\":1351824120,\"data\":[48.756080,2.302038]}";
-//
-//  StaticJsonBuffer<200> jsonBuffer;
-//  
-//  JsonObject& root = jsonBuffer.parseObject(json);
-//  
-//  const char* sensor = root["parts"];
-//  long time          = root["time"];
-//  double latitude    = root["data"][0];
-//  double longitude   = root["data"][1];
+
 }
 void setup() {
-  setAllColor(0, strip.Color(255,0,0));
-  // put your setup code here, to run once:
-  //  Serial.begin(9600);
-  //  setupAccessPoint();
-  //  connectWiFi();
-  //  getStatus();
+  // Sync controller with NTP server
+  sendNTPpacket(timeServer);
+  setTime();
+  
+  if (WifiStatus = WL_IDLE_STATUS){
+     setupAccessPoint();
+     while (WifiStatus != WL_CONNECTED){
+      runWebServer();
+     }
+  }
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  if (ledStatus = NONE){
+    getStatus();
+  }
+  else if (ledStatus = LOAD_SCENARIO){
+    parseScenario();
+  }
+  else if (ledStatus = RUNNING){
+    for (int i = 0; i < PARTS; i++){
+      if (timings[i] + (delays[i]*100) < millis()){
+        byte modus = example_response_matrix[i][positions[i]][1];
+        byte r = example_response_matrix[i][positions[i]][2];
+        byte g = example_response_matrix[i][positions[i]][3];
+        byte b = example_response_matrix[i][positions[i]][4];
+        delays[i] = example_response_matrix[i][positions[i]][5];
+        positions[i] = positions[i]+1;
 
+// TODO!! Add more patterns
+        if (modus == 1){
+          setAllColor(i,strip.Color(r,g,b));
+        }
+      }
+      timings[i] = millis();
+    }
+  }
 }
 
 
